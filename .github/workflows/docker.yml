@@ -16,13 +16,14 @@ concurrency:
 
 jobs:
   build:
-    environment:
-      name: production
+    name: Build Container Image
+    outputs:
+      image_digest: ${{ steps.build-and-push.outputs.digest }}
     runs-on: ubuntu-latest
     permissions:
-      # Read git details about the repository
-      contents: read
-      # needed for signing the images with GitHub OIDC Token
+      # Read git details about the repository, post dependency snapshot (test)
+      contents: write
+      # Needed for signing the images with GitHub OIDC Token
       id-token: write
     steps:
       - name: Install Cosign
@@ -41,6 +42,7 @@ jobs:
         with:
           images: ${{ github.repository }}
           tags: |
+            latest
             type=pep440,pattern={{raw}}
 
       - name: Build and push all platforms
@@ -88,3 +90,18 @@ jobs:
             images+="${tag}@${DIGEST} "
           done
           cosign sign --yes ${images}
+
+  dockerhub-provenance:
+    name: Docker Hub Provenance
+    needs: [build]
+    permissions:
+      actions: read # for detecting the Github Actions environment.
+      packages: write # write packages provenance
+      id-token: write # for creating OIDC tokens for signing.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
+    with:
+      image: ${{ github.repository }}
+      digest: ${{ needs.build.outputs.image_digest }}
+    secrets:
+      registry-username: ${{ secrets.DOCKER_HUB_USERNAME }}
+      registry-password: ${{ secrets.DOCKER_HUB_TOKEN }}
