@@ -102,6 +102,7 @@ jobs:
     with:
       image: ${{ github.repository }}
       digest: ${{ needs.build.outputs.image_digest }}
+      private-repository: true
     secrets:
       registry-username: ${{ secrets.DOCKER_HUB_USERNAME }}
       registry-password: ${{ secrets.DOCKER_HUB_TOKEN }}
