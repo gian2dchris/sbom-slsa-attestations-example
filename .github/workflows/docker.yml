@@ -1,0 +1,84 @@
+# GitHub actions workflow which builds and publishes the docker images.
+name: Build docker images
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: # A build was manually requested
+
+# Disable all permissions for the GITHUB_TOKEN access token by default.
+permissions: {}
+
+jobs:
+  build:
+    environment:
+      name: production
+    runs-on: ubuntu-latest
+    permissions:
+      # Read git details about the repository
+      contents: read
+      # needed for signing the images with GitHub OIDC Token
+      id-token: write
+    steps:
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Log in to DockerHub
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      # add oci labels indicating the packaged software version
+      - name: Calculate docker image tag
+        id: set-tag
+        uses: docker/metadata-action@4f5b5234679dfa19837d4942067c97d7df43b7b3 # master
+        with:
+          images: ${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=pep440,pattern={{raw}}
+          labels: |
+            org.opencontainers.image.version={{version}}
+
+      - name: Build and push all platforms
+        id: build-and-push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          push: true
+          labels: |
+            gitsha1=${{ github.sha }}
+            ${{ steps.setup-tags.outputs.labels}}
+          tags: "${{ steps.set-tag.outputs.tags }}"
+          file: "docker/Dockerfile"
+          platforms: linux/amd64
+
+      - name: Generate SBOM from pushed image using Syft
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          image: ${{ steps.build-and-push.outputs.image }}@${{ steps.build-and-push.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          dependency-snapshot: true
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Attest SBOM to published image
+        env:
+          IMAGE: ${{ steps.build-and-push.outputs.digest}}@${{ steps.build-and-push.outputs.tags }}
+        run: |
+          cosign attest --yes \
+          --predicate sbom.cdx.json \
+          --type cyclonedx \
+          "${IMAGE}"
+
+      - name: Sign the images with GitHub OIDC Token
+        env:
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          TAGS: ${{ steps.set-tag.outputs.tags }}
+        run: |
+          images=""
+          for tag in ${TAGS}; do
+            images+="${tag}@${DIGEST} "
+          done
+          cosign sign --yes ${images}
