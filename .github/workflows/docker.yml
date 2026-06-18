@@ -41,7 +41,6 @@ jobs:
         with:
           images: ${{ github.repository }}
           tags: |
-            type=raw,value=latest
             type=pep440,pattern={{raw}}
           labels: |
             org.opencontainers.image.version={{version}}
@@ -53,7 +52,7 @@ jobs:
           push: true
           labels: |
             gitsha1=${{ github.sha }}
-            ${{ steps.setup-tags.outputs.labels}}
+            ${{ steps.set-tag.outputs.labels}}
           tags: "${{ steps.set-tag.outputs.tags }}"
           file: "docker/Dockerfile"
           platforms: linux/amd64
