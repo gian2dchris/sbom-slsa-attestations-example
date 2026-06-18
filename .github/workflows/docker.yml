@@ -9,6 +9,11 @@ on:
 # Disable all permissions for the GITHUB_TOKEN access token by default.
 permissions: {}
 
+# cancel multiple workflows running on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     environment:
@@ -53,25 +58,28 @@ jobs:
           file: "docker/Dockerfile"
           platforms: linux/amd64
 
+      # generate SBOM only once per build based on digest
       - name: Generate SBOM from pushed image using Syft
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
         with:
-          image: ${{ steps.build-and-push.outputs.image }}@${{ steps.build-and-push.outputs.digest }}
+          image: ${{ github.repository }}@${{ steps.build-and-push.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.cdx.json
           dependency-snapshot: true
           upload-artifact: true
           upload-release-assets: false
 
+      # attest SBOM once per build based on digest
       - name: Attest SBOM to published image
         env:
-          IMAGE: ${{ steps.build-and-push.outputs.digest}}@${{ steps.build-and-push.outputs.tags }}
+          IMAGE: ${{ github.repository}}@${{ steps.build-and-push.outputs.digest }}
         run: |
           cosign attest --yes \
           --predicate sbom.cdx.json \
           --type cyclonedx \
           "${IMAGE}"
 
+      # sign multiple tags to tie them to an image digest
       - name: Sign the images with GitHub OIDC Token
         env:
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
