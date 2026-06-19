@@ -98,7 +98,8 @@ jobs:
       actions: read # for detecting the Github Actions environment.
       packages: write # write packages provenance
       id-token: write # for creating OIDC tokens for signing.
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
       image: ${{ github.repository }}
       digest: ${{ needs.build.outputs.image_digest }}
