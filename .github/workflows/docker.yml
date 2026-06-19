@@ -38,7 +38,7 @@ jobs:
       # add oci labels indicating the packaged software version
       - name: Calculate docker image tag
         id: set-tag
-        uses: docker/metadata-action@4f5b5234679dfa19837d4942067c97d7df43b7b3 # master
+        uses: docker/metadata-action@020b7354dd55a28effcab0f3b19639fe24d3f58b # master
         with:
           images: ${{ github.repository }}
           tags: |
