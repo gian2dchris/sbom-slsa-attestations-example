@@ -21,7 +21,7 @@ jobs:
       image_digest: ${{ steps.build-and-push.outputs.digest }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Read git details about the repository, post dependency snapshot (test)
+      contents: read # Read git details about the repository
       id-token: write # Needed for signing the images with GitHub OIDC Token
     steps:
       - name: Install Cosign
@@ -63,7 +63,6 @@ jobs:
           image: ${{ github.repository }}@${{ steps.build-and-push.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.cdx.json
-          dependency-snapshot: true
           upload-artifact: true
           upload-release-assets: false
 
@@ -101,7 +100,6 @@ jobs:
     with:
       image: ${{ github.repository }}
       digest: ${{ needs.build.outputs.image_digest }}
-      private-repository: true
     secrets:
       registry-username: ${{ secrets.DOCKER_HUB_USERNAME }}
       registry-password: ${{ secrets.DOCKER_HUB_TOKEN }}
