@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # Read git details about the repository
+      packages: write # Write to ghcr.io
       id-token: write # Needed for signing the images with GitHub OIDC Token
     steps:
       - name: Install Cosign
