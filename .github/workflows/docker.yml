@@ -4,7 +4,7 @@ name: Build docker images
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch: # A build was manually requested
+  workflow_dispatch: # trigger manually
 
 # Disable all permissions for the GITHUB_TOKEN access token by default.
 permissions: {}
@@ -15,7 +15,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io
+  # Space-separated list of image repositories to publish to.
+  # To add a new registry:
+  # 1. append its repo in REGISTRIES list
+  # 2. add a login step
+  # 3. add a provenance job
+  REGISTRIES: |
+    ghcr.io/${{ github.repository }}
+    docker.io/${{ github.repository }}
 
 jobs:
   build:
@@ -27,15 +34,16 @@ jobs:
       contents: read # Read git details about the repository
       packages: write # Write to ghcr.io
       id-token: write # Needed for signing the images with GitHub OIDC Token
+    environment: production
     steps:
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      # - name: Log in to DockerHub
-      #   uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
-      #   with:
-      #     username: ${{ secrets.DOCKER_HUB_USERNAME }} # zizmor: ignore[secrets-outside-env]
-      #     password: ${{ secrets.DOCKER_HUB_TOKEN }} # zizmor: ignore[secrets-outside-env]
+      - name: Log in to DockerHub
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }} # zizmor: ignore[secrets-outside-env]
+          password: ${{ secrets.DOCKER_HUB_TOKEN }} # zizmor: ignore[secrets-outside-env]
 
       # login to ghcr.io
       - name: Log in to GHCR
@@ -46,12 +54,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # add oci labels indicating the packaged software version
-      - name: Calculate docker image tag
+      - name: Calculate docker image tags
         id: set-tag
         uses: docker/metadata-action@020b7354dd55a28effcab0f3b19639fe24d3f58b # master
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ github.repository }}
+          images: ${{ env.REGISTRIES }}
           tags: |
             latest
             type=pep440,pattern={{raw}}
@@ -61,11 +68,9 @@ jobs:
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           push: true
-          labels: |
-            ${{ steps.set-tag.outputs.labels }}
-          annotations: |
-            ${{ steps.set-tag.outputs.annotations }}
-          tags: "${{ steps.set-tag.outputs.tags }}"
+          labels: ${{ steps.set-tag.outputs.labels }}
+          annotations: ${{ steps.set-tag.outputs.annotations }}
+          tags: ${{ steps.set-tag.outputs.tags }}
           file: "docker/Dockerfile"
           platforms: linux/amd64
 
@@ -73,7 +78,7 @@ jobs:
       - name: Generate SBOM for ghcr.io image using Syft
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
         with:
-          image: ${{ env.REGISTRY }}/${{ github.repository }}@${{ steps.build-and-push.outputs.digest }}
+          image: ghcr.io/${{ github.repository }}@${{ steps.build-and-push.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.cdx.json
           upload-artifact: true
@@ -82,27 +87,29 @@ jobs:
       # attest SBOM once per build based on digest
       - name: Attest SBOM to published image
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}@${{ steps.build-and-push.outputs.digest }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
         run: |
-          cosign attest --yes \
-          --predicate sbom.cdx.json \
-          --type cyclonedx \
-          "${IMAGE}"
+          for repo in ${REGISTRIES}; do
+            cosign attest --yes \
+            --predicate sbom.cdx.json \
+            --type cyclonedx \
+            "${repo}@${DIGEST}"
+          done
 
-      # sign multiple tags to tie them to an image digest
+      # sign the image by digest in every registry (covers all tags resolving to it)
       - name: Sign the images with GitHub OIDC Token
         env:
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
           TAGS: ${{ steps.set-tag.outputs.tags }}
         run: |
           images=()
-          for tag in ${TAGS}; do
-            images+=("${tag}@${DIGEST}")
+          for repo in ${REGISTRIES}; do
+            images+=("${repo}@${DIGEST}")
           done
           cosign sign --yes "${images[@]}"
 
   ghcr-provenance:
-    name: GHCR Hub Provenance
+    name: ghcr.io Provenance
     needs: [build]
     permissions:
       actions: read # for detecting the Github Actions environment.
@@ -115,18 +122,18 @@ jobs:
       digest: ${{ needs.build.outputs.image_digest }}
       registry-username: ${{ github.actor }}
 
-  # dockerhub-provenance:
-  #   name: Docker Hub Provenance
-  #   needs: [build]
-  #   permissions:
-  #     actions: read # for detecting the Github Actions environment.
-  #     packages: write # write packages provenance
-  #     id-token: write # for creating OIDC tokens for signing.
-  #   if: startsWith(github.ref, 'refs/tags/')
-  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0 # zizmor: ignore[unpinned-uses]
-  #   with:
-  #     image: ${{ github.repository }}
-  #     digest: ${{ needs.build.outputs.image_digest }}
-  #   secrets:
-  #     registry-username: ${{ secrets.DOCKER_HUB_USERNAME }}
-  #     registry-password: ${{ secrets.DOCKER_HUB_TOKEN }}
+  dockerhub-provenance:
+    name: Docker Hub Provenance
+    needs: [build]
+    permissions:
+      actions: read # for detecting the Github Actions environment.
+      packages: write # write packages provenance
+      id-token: write # for creating OIDC tokens for signing.
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0 # zizmor: ignore[unpinned-uses]
+    with:
+      image: docker.io/${{ github.repository }}
+      digest: ${{ needs.build.outputs.image_digest }}
+    secrets:
+      registry-username: ${{ secrets.DOCKER_HUB_USERNAME }}
+      registry-password: ${{ secrets.DOCKER_HUB_TOKEN }}
