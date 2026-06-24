@@ -88,12 +88,13 @@ jobs:
       - name: Attest SBOM to published image
         env:
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          TAGS: ${{ steps.set-tag.outputs.tags }}
         run: |
-          for repo in ${REGISTRIES}; do
+          for tag in ${TAGS}; do
             cosign attest --yes \
             --predicate sbom.cdx.json \
             --type cyclonedx \
-            "${repo}@${DIGEST}"
+            "${tag}@${DIGEST}"
           done
 
       # sign the image by digest in every registry (covers all tags resolving to it)
@@ -103,8 +104,8 @@ jobs:
           TAGS: ${{ steps.set-tag.outputs.tags }}
         run: |
           images=()
-          for repo in ${REGISTRIES}; do
-            images+=("${repo}@${DIGEST}")
+          for tag in ${TAGS}; do
+            images+=("${tag}@${DIGEST}")
           done
           cosign sign --yes "${images[@]}"
 
