@@ -1,3 +1,14 @@
-ARG PYTHON_VERSION=3.11
+FROM python:3.11-slim
 
-FROM docker.io/python:${PYTHON_VERSION}-slim AS requirements
+WORKDIR /app/
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+COPY pyproject.toml uv.lock main.py /app/
+RUN uv sync --frozen --no-dev
+
+ENV PATH="/app/.venv/bin:${PATH}"
+
+USER app
+
+CMD ["python", "main.py"]
