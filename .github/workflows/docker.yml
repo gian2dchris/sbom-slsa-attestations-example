@@ -20,7 +20,7 @@ env:
   # 1. append its repo in REGISTRIES list
   # 2. add a login step
   # 3. add a provenance job
-  REGISTRIES: |
+  REPOSITORIES: |
     ghcr.io/${{ github.repository }}
     docker.io/${{ github.repository }}
 jobs:
@@ -54,24 +54,29 @@ jobs:
 
       # add oci labels indicating the packaged software version
       - name: Calculate docker image tags
-        id: set-tag
+        id: meta
         uses: docker/metadata-action@020b7354dd55a28effcab0f3b19639fe24d3f58b # master
         with:
-          images: ${{ env.REGISTRIES }}
+          images: ${{ env.REPOSITORIES }}
+          flavor: |
+            latest=false
           tags: |
-            latest
+            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=pep440,pattern={{raw}}
+            type=sha
 
-      - name: Build and push all platforms
+      - name: Build and push image
         id: build-and-push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
-          push: true
-          labels: ${{ steps.set-tag.outputs.labels }}
-          annotations: ${{ steps.set-tag.outputs.annotations }}
-          tags: ${{ steps.set-tag.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          tags: ${{ steps.meta.outputs.tags }}
           file: "docker/Dockerfile"
           platforms: linux/amd64
+          outputs: type=image,push=${{ github.event_name != 'pull_request'}},name-canonical=true,oci-mediatypes=true
 
       # generate SBOM only once per build based on digest
       - name: Generate SBOM for ghcr.io image using Syft
@@ -87,7 +92,7 @@ jobs:
       - name: Attest SBOM to published image
         env:
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
-          TAGS: ${{ steps.set-tag.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           for tag in ${TAGS}; do
             cosign attest --yes \
@@ -102,7 +107,7 @@ jobs:
       - name: Sign the images with GitHub OIDC Token
         env:
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
-          TAGS: ${{ steps.set-tag.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           images=()
           for tag in ${TAGS}; do
@@ -118,7 +123,7 @@ jobs:
       packages: write # write packages provenance
       id-token: write # for creating OIDC tokens for signing.
     if: startsWith(github.ref, 'refs/tags/')
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0 # zizmor: ignore[unpinned-uses]
     with:
       image: ghcr.io/${{ github.repository }}
       digest: ${{ needs.build.outputs.image_digest }}
