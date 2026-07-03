@@ -1,8 +1,6 @@
-FROM python:3.11-slim
-
+FROM python:3.14-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
-
 
 WORKDIR /app
 
@@ -12,10 +10,13 @@ RUN groupadd -r app && \
     chown -R app:app /app
 
 USER app
-COPY pyproject.toml uv.lock main.py /app/
+
+COPY pyproject.toml uv.lock README.md ./
+
+COPY ./sbom_slsa_attestations_example ./sbom_slsa_attestations_example
 
 RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
-CMD ["python", "main.py"]
+CMD ["uv", "run", "sbom-slsa-attestations-example"]
