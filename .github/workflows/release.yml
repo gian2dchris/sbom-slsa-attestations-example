@@ -1,0 +1,74 @@
+# GitHub actions workflow which builds and publishes the python package wheel archive.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: # trigger manually
+
+# Disable all permissions for the GITHUB_TOKEN access token by default.
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release and upload assets
+      id-token: write # keyless signing of the attestations via GitHub OIDC
+      attestations: write # write to GitHub's attestation store
+    environment: production
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          enable-cache: false
+
+      # produces both release artifacts: the wheel (.whl) and the sdist (.tar.gz)
+      - name: Build wheel and sdist
+        run: uv build
+
+      # SBOM predicate for the release. Scans the source tree; emitted as a file
+      # so it can be both attested and published as a release asset.
+      - name: Generate SBOM for release
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          path: ./
+          format: cyclonedx-json
+          output-file: sbom-release.cdx.json
+          upload-artifact: true
+          upload-artifact-retention: 1
+          upload-release-assets: false
+
+      # Attest the CycloneDX SBOM against BOTH release artifacts (glob subject).
+      # Blob attestations land in GitHub's attestation API + public Rekor
+      # (hashes only). The predicate itself is published separately below.
+      - name: Attest SBOM
+        id: attest-sbom
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: dist/*
+          predicate-type: https://cyclonedx.org/bom
+          predicate-path: sbom-release.cdx.json
+
+      # Attest the SLSA provenance against BOTH release artifacts (glob subject).
+      - name: Attest Provenance
+        id: attest-provenance
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: dist/*
+
+      # Publish the artifacts and BOTH predicate files as release assets.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/*
+            ${{ steps.attest-sbom.outputs.bundle-path}}
+            ${{ steps.attest-provenance.outputs.bundle-path}}
