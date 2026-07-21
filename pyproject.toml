@@ -16,5 +16,11 @@ sbom-slsa-attestations-example = "sbom_slsa_attestations_example.main:main"
 requires = ["uv_build>=0.11.7,<0.12.0"]
 build-backend = "uv_build"
 
+
 [tool.uv.build-backend]
 module-root = ""
+
+[dependency-groups]
+dev = [
+    "setuptools>=83.0.0",
+]
