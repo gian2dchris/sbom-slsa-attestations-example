@@ -85,6 +85,12 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           file: "docker/Dockerfile"
           platforms: linux/amd64, linux/arm64
+# `docker/build-push-action` v6/v7 enables `provenance=true` by default
+# That wraps your image in an OCI image index that also references attestation manifests.
+# Docker Hub and other registries (GHCR in that case) do not store/serialize
+# the attestation-bearing index identically. As a result  the top-level image digest diverges
+          provenance: false
+          sbom: false
           outputs: type=image,push=${{ github.event_name != 'pull_request'}},name-canonical=true,oci-mediatypes=true
 
       # generate SBOM only once per build based on digest
@@ -104,26 +110,23 @@ jobs:
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          for tag in ${TAGS}; do
+          for repo in $REPOSITORIES; do
             cosign attest --yes \
             --predicate sbom-container.cdx.json \
             --type cyclonedx \
-            "${tag}"
+            "${repo}@${DIGEST}"
           done
 
-      # sign the image by digest in every registry (covers all tags resolving to it)
-      # dockerhub stores images using a different digest and returns a 404 for referencing image by digest.
-      # Correct implementation should sign and attest ${repo}@${DIGEST} but requires manual steps for dockerhub
+      # sign the image by digest for every repository
+      # cosign sign --yes ${repo}@${DIGEST}
       - name: Sign the images with GitHub OIDC Token
         env:
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          images=()
-          for tag in ${TAGS}; do
-            images+=("${tag}")
+          for repo in $REPOSITORIES; do
+            cosign sign --yes "${repo}@${DIGEST}"
           done
-          cosign sign --yes "${images[@]}"
 
   ghcr-provenance:
     name: ghcr.io Provenance

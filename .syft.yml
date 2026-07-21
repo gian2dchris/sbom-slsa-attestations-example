@@ -1,0 +1,33 @@
+log:
+  # suppress all logging output (env: SYFT_LOG_QUIET)
+  quiet: false
+  # increase verbosity (-v = info, -vv = debug) (env: SYFT_LOG_VERBOSITY)
+  verbosity: 1
+  # explicitly set the logging level (available: [error warn info debug trace]) (env: SYFT_LOG_LEVEL)
+  level: "info"
+
+# enable one or more package catalogers (env: SYFT_CATALOGERS)
+catalogers: []
+# set the base set of catalogers to use (defaults to 'image' or 'directory' depending on the scan source) (env: SYFT_DEFAULT_CATALOGERS)
+default-catalogers: []
+# add, remove, and filter the catalogers to be used (env: SYFT_SELECT_CATALOGERS)
+select-catalogers: []
+
+license:
+  # include the content of licenses in the SBOM for a given syft scan; valid values are: [all unknown none] (env: SYFT_LICENSE_CONTENT)
+  content: "none"
+
+  # adjust the percent as a fraction of the total text, in normalized words, that
+  # matches any valid license for the given inputs, expressed as a percentage across all of the licenses matched. (env: SYFT_LICENSE_COVERAGE)
+  coverage: 75
+
+source:
+  # set the name of the target being analyzed (env: SYFT_SOURCE_NAME)
+  name: "https://github.com/gian2dchris/sbom-slsa-attestations-example"
+  # set the version of the target being analyzed (env: SYFT_SOURCE_VERSION)
+  version: ""
+  # the organization that supplied the component, which often may be the manufacturer, distributor, or repackager (env: SYFT_SOURCE_SUPPLIER)
+  supplier: "https://github.com/gian2dchris"
+
+# exclude paths from being scanned using a glob expression (env: SYFT_EXCLUDE)
+exclude: []
