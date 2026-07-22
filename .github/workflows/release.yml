@@ -48,7 +48,7 @@ jobs:
       # (hashes only). The predicate itself is published separately below.
       - name: Attest SBOM
         id: attest-sbom
-        if: startsWith(github.ref, 'refs/tags/')
+        # if: startsWith(github.ref, 'refs/tags/')
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-path: dist/*
@@ -58,15 +58,15 @@ jobs:
       # Attest the SLSA provenance against BOTH release artifacts (glob subject).
       - name: Attest Provenance
         id: attest-provenance
-        if: startsWith(github.ref, 'refs/tags/')
+        # if: startsWith(github.ref, 'refs/tags/')
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-path: dist/*
 
-      # Publish the artifacts and BOTH predicate files as release assets.
+      # Publish the artifacts and predicate files as release assets.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b
-        if: startsWith(github.ref, 'refs/tags/')
+        # if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             dist/*
