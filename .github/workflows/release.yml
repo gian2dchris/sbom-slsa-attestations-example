@@ -1,5 +1,5 @@
 # GitHub actions workflow which builds and publishes the python package wheel archive.
-name: Release
+name: Build Release
 
 on:
   push:
@@ -65,10 +65,18 @@ jobs:
 
       # Publish the artifacts and predicate files as release assets.
       - name: Create GitHub Release
-        # if: startsWith(github.ref, 'refs/tags/')
-        run: gh release create \
-            dist/*
-            ${{ steps.attest-sbom.outputs.bundle-path}}
-            ${{ steps.attest-provenance.outputs.bundle-path}}
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+            # distinct attestation bundle names
+            cp "$SBOM_BUNDLE" sbom-release.cdx.json
+            cp "$PROV_BUNDLE" provenance.json
+
+            # create release on ref name
+            gh release create "$GITHUB_REF_NAME" \
+            dist/* \
+            sbom-release.cdx.json \
+            provenance.json
         env:
-            GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          SBOM_BUNDLE: ${{ steps.attest-sbom.outputs.bundle-path }}
+          PROV_BUNDLE: ${{ steps.attest-provenance.outputs.bundle-path }}
