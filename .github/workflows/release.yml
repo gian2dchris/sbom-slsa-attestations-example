@@ -9,6 +9,11 @@ on:
 # Disable all permissions for the GITHUB_TOKEN access token by default.
 permissions: {}
 
+# cancel multiple workflows running on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
